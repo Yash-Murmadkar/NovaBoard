@@ -48,3 +48,19 @@ export const login = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
+
+export const getMe = async (req, res) => {
+  try {
+    // User is already attached to req by authMiddleware
+    const userSafe = { 
+      id: req.user._id, 
+      name: req.user.name, 
+      email: req.user.email, 
+      createdAt: req.user.createdAt 
+    };
+    return res.status(200).json(userSafe);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};

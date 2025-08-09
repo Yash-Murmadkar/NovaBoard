@@ -1,18 +1,35 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useContext, useState } from "react";
+import { useContext, useState, useEffect } from "react";
 import { AuthContext } from "../AuthContext";
 import Modal from "../components/Modal";
 
 function Home() {
-  const { user } = useContext(AuthContext);
+  const { user, logout, loading } = useContext(AuthContext);
   const navigate = useNavigate();
-
   const [isModalOpen, setModalOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Debug user state changes
+  useEffect(() => {
+    console.log("User state changed:", user);
+  }, [user]);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      navigate("/");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   const handleCollaborativeClick = (e) => {
     if (!user) {
       e.preventDefault();
-      setModalOpen(true); // show modal instead of alert
+      setModalOpen(true);
     }
   };
 
@@ -21,17 +38,40 @@ function Home() {
     navigate("/login");
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 flex flex-col items-center p-6">
       {/* Header */}
       <header className="w-full max-w-6xl flex justify-between items-center mb-10">
         <h1 className="text-2xl font-bold text-blue-600">NovaBoard</h1>
-        <Link
-          to="/"
-          className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm"
-        >
-          Logout
-        </Link>
+        {user && (
+          <button
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className={`bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm ${
+              isLoggingOut ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+          >
+            {isLoggingOut ? (
+              <span className="flex items-center">
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Logging out...
+              </span>
+            ) : (
+              "Logout"
+            )}
+          </button>
+        )}
       </header>
 
       {/* Title + Subtitle */}
@@ -86,13 +126,23 @@ function Home() {
 
       {/* Modal */}
       <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title="Sign In Required">
-        <p className="mb-4">You need to sign in to use the Collaborative Room feature.</p>
-        <button
-          onClick={handleSignInClick}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-        >
-          Go to Sign In
-        </button>
+        <div className="space-y-4">
+          <p className="mb-4">You need to sign in to use the Collaborative Room feature.</p>
+          <div className="flex space-x-4">
+            <button
+              onClick={handleSignInClick}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex-1"
+            >
+              Go to Sign In
+            </button>
+            <button
+              onClick={() => setModalOpen(false)}
+              className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded flex-1"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
