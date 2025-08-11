@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
+import { AuthContext } from "../AuthContext";
 
 function Register() {
   const navigate = useNavigate();
+  const { register } = useContext(AuthContext);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
   });
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -17,25 +20,15 @@ function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setIsLoading(true);
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.message || "Registration failed");
-        return;
-      }
-
-      localStorage.setItem("token", data.token);
-      navigate("/personal");
+      await register(formData.name, formData.email, formData.password);
+      navigate("/home");
     } catch (err) {
-      console.error(err);
-      setError("Server error");
+      setError(err.message || "Registration failed");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -77,9 +70,14 @@ function Register() {
         />
         <button
           type="submit"
-          className="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded"
+          disabled={isLoading}
+          className={`w-full py-2 rounded text-white ${
+            isLoading 
+              ? "bg-green-400 cursor-not-allowed" 
+              : "bg-green-500 hover:bg-green-600"
+          }`}
         >
-          Register
+          {isLoading ? "Registering..." : "Register"}
         </button>
       </form>
     </div>

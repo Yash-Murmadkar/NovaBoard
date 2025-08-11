@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
+import { AuthContext } from "../AuthContext";
 
 function Login() {
   const navigate = useNavigate();
+  const { login } = useContext(AuthContext);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -16,25 +19,15 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setIsLoading(true);
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.message || "Login failed");
-        return;
-      }
-
-      localStorage.setItem("token", data.token);
+      await login(formData.email, formData.password);
       navigate("/home");
     } catch (err) {
-      console.error(err);
-      setError("Server error");
+      setError(err.message || "Login failed");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -67,9 +60,14 @@ function Login() {
         />
         <button
           type="submit"
-          className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded"
+          disabled={isLoading}
+          className={`w-full py-2 rounded text-white ${
+            isLoading 
+              ? "bg-blue-400 cursor-not-allowed" 
+              : "bg-blue-500 hover:bg-blue-600"
+          }`}
         >
-          Login
+          {isLoading ? "Logging in..." : "Login"}
         </button>
       </form>
     </div>

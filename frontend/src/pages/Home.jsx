@@ -102,7 +102,7 @@ function Home() {
 
         {/* Collaborative Room */}
         <Link
-          to="/room"
+          to="/room-selection"
           onClick={handleCollaborativeClick}
           className={`${
             !user ? "cursor-not-allowed opacity-50" : "hover:shadow-xl"

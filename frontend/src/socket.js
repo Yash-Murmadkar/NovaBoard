@@ -17,3 +17,14 @@ export function getSocket() {
   }
   return socket;
 }
+
+export function disconnectSocket() {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+}
+
+export function isSocketConnected() {
+  return socket && socket.connected;
+}

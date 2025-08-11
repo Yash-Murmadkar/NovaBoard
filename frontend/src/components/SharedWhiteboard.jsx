@@ -39,7 +39,7 @@ export default function SharedWhiteboard({ roomId, disabled = false }) {
       socket.on("connect", () => {
         setIsConnected(true);
         console.log("Connected to whiteboard room:", roomId);
-        socket.emit("join-room", { roomId });
+        // Don't emit join-room here - it's handled by the Room component
       });
 
       socket.on("disconnect", () => {
@@ -57,8 +57,7 @@ export default function SharedWhiteboard({ roomId, disabled = false }) {
       socket.on("endDraw", handleRemoteEnd);
       socket.on("clear", handleRemoteClear);
 
-      // Request initial sync state
-      socket.emit("requestSync", { roomId });
+      // Initial sync is handled by the Room component
 
       return () => {
         socket.off("startDraw", handleRemoteStart);
