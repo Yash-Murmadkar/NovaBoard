@@ -2,7 +2,7 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { getSocket } from "../socket";
 
-export default function SharedWhiteboard({ roomId, disabled = false }) {
+export default function SharedWhiteboard({ roomId, disabled = false, isConnected = false }) {
   const canvasRef = useRef(null);
   const ctxRef = useRef(null);
   const socketRef = useRef(null);
@@ -12,7 +12,6 @@ export default function SharedWhiteboard({ roomId, disabled = false }) {
   const [brushColor, setBrushColor] = useState("#000000");
   const [brushSize, setBrushSize] = useState(4);
   const [mode, setMode] = useState("draw"); // "draw" or "erase"
-  const [isConnected, setIsConnected] = useState(false);
 
 
   // Initialize canvas and socket
@@ -36,22 +35,7 @@ export default function SharedWhiteboard({ roomId, disabled = false }) {
       
       const socket = socketRef.current;
       
-      socket.on("connect", () => {
-        setIsConnected(true);
-        console.log("Connected to whiteboard room:", roomId);
-        // Don't emit join-room here - it's handled by the Room component
-      });
-
-      socket.on("disconnect", () => {
-        setIsConnected(false);
-        console.log("Disconnected from whiteboard room");
-      });
-
-      socket.on("connect_error", (error) => {
-        setIsConnected(false);
-        console.error("Connection error:", error);
-      });
-
+      // Only listen for drawing events, connection status is managed by parent
       socket.on("startDraw", handleRemoteStart);
       socket.on("draw", handleRemoteDraw);
       socket.on("endDraw", handleRemoteEnd);
@@ -105,7 +89,7 @@ export default function SharedWhiteboard({ roomId, disabled = false }) {
       return;
     }
     
-    console.log("Handling remote startDraw from user:", userId);
+    
     
     const ctx = ctxRef.current;
     const canvas = canvasRef.current;
@@ -162,7 +146,7 @@ export default function SharedWhiteboard({ roomId, disabled = false }) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    console.log("Local startDrawing at:", x, y);
+
 
     // Reset draw counter for new drawing session
     drawCounterRef.current = 0;
@@ -251,18 +235,9 @@ export default function SharedWhiteboard({ roomId, disabled = false }) {
 
   return (
     <div className="flex flex-col items-center p-4">
-      {/* Connection Status */}
-      <div className="mb-4 flex items-center gap-2">
-        <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-        <span className="text-sm text-gray-600">
-          {isConnected ? `Connected to room: ${roomId}` : 'Connecting...'}
-        </span>
-        {isConnected && (
-          <span className="text-xs text-gray-500">
-            (ID: {socketRef.current?.id?.slice(0, 8)})
-          </span>
-        )}
-      </div>
+             
+
+       
 
       {/* Toolbar */}
       <div className="mb-4 flex flex-wrap gap-3 justify-center">

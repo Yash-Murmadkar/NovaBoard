@@ -43,7 +43,7 @@ io.on("connection", (socket) => {
   console.log("🟢 New client connected:", socket.id);
 
   // Create a new room
-  socket.on("create-room", ({ roomCode, userId }) => {
+  socket.on("create-room", ({ roomCode, userId, username }) => {
     try {
       // Check if room already exists
       if (activeRooms.has(roomCode)) {
@@ -59,7 +59,7 @@ io.on("connection", (socket) => {
         roomCode,
         createdBy: userId,
         createdAt: new Date(),
-        participants: [socket.id],
+        participants: [{ id: socket.id, username: username || 'Anonymous' }],
         maxParticipants: 10 // You can adjust this limit
       };
 
@@ -72,8 +72,6 @@ io.on("connection", (socket) => {
 
       // Join the room
       socket.join(roomCode);
-      
-      console.log(`🏠 Room created: ${roomCode} by user ${userId}`);
       
       socket.emit("room-created", { 
         success: true, 
@@ -90,7 +88,7 @@ io.on("connection", (socket) => {
   });
 
   // Join an existing room
-  socket.on("join-room", ({ roomCode }) => {
+  socket.on("join-room", ({ roomCode, username }) => {
     try {
       const room = activeRooms.get(roomCode);
       
@@ -111,28 +109,34 @@ io.on("connection", (socket) => {
         return;
       }
 
-      // Add user to room participants
-      if (!room.participants.includes(socket.id)) {
-        room.participants.push(socket.id);
+      // Remove any existing socket ID for this user (in case of reconnection)
+      // This prevents duplicate participants when users reconnect
+      const existingIndex = room.participants.findIndex(p => p.id === socket.id);
+      if (existingIndex > -1) {
+        room.participants.splice(existingIndex, 1);
       }
+
+      // Add user to room participants
+      room.participants.push({ id: socket.id, username: username || 'Anonymous' });
 
       // Join the room
       socket.join(roomCode);
       
-      console.log(`👥 User ${socket.id} joined room: ${roomCode}`);
-      
       // Notify other users in the room
       socket.to(roomCode).emit("user-joined", { 
         userId: socket.id, 
+        username: username || 'Anonymous',
         roomCode,
-        participantCount: room.participants.length
+        participantCount: room.participants.length,
+        participants: room.participants
       });
       
       socket.emit("room-joined", { 
         success: true, 
         roomCode,
         room,
-        participantCount: room.participants.length
+        participantCount: room.participants.length,
+        participants: room.participants
       });
     } catch (error) {
       console.error("Error joining room:", error);
@@ -189,15 +193,18 @@ io.on("connection", (socket) => {
     try {
       const room = activeRooms.get(roomCode);
       if (room) {
-        const participantIndex = room.participants.indexOf(socket.id);
+        const participantIndex = room.participants.findIndex(p => p.id === socket.id);
         if (participantIndex > -1) {
+          const leavingUser = room.participants[participantIndex];
           room.participants.splice(participantIndex, 1);
           
           // Notify other users
           socket.to(roomCode).emit("user-left", { 
             userId: socket.id, 
+            username: leavingUser.username,
             roomCode,
-            participantCount: room.participants.length
+            participantCount: room.participants.length,
+            participants: room.participants
           });
           
           // If room is empty, clean it up after a delay
@@ -206,12 +213,9 @@ io.on("connection", (socket) => {
               if (activeRooms.get(roomCode)?.participants.length === 0) {
                 activeRooms.delete(roomCode);
                 roomStates.delete(roomCode);
-                console.log(`🧹 Cleaned up empty room: ${roomCode}`);
               }
             }, 300000); // 5 minutes delay
           }
-          
-          console.log(`👋 User ${socket.id} manually left room: ${roomCode}`);
         }
       }
     } catch (error) {
@@ -221,19 +225,20 @@ io.on("connection", (socket) => {
 
   // Handle disconnection
   socket.on("disconnect", () => {
-    console.log("🔴 Client disconnected:", socket.id);
-    
     // Remove user from all rooms they were in
     for (const [roomCode, room] of activeRooms.entries()) {
-      const participantIndex = room.participants.indexOf(socket.id);
+      const participantIndex = room.participants.findIndex(p => p.id === socket.id);
       if (participantIndex > -1) {
+        const leavingUser = room.participants[participantIndex];
         room.participants.splice(participantIndex, 1);
         
         // Notify other users
         socket.to(roomCode).emit("user-left", { 
           userId: socket.id, 
+          username: leavingUser.username,
           roomCode,
-          participantCount: room.participants.length
+          participantCount: room.participants.length,
+          participants: room.participants
         });
         
         // If room is empty, clean it up after a delay
@@ -242,7 +247,6 @@ io.on("connection", (socket) => {
             if (activeRooms.get(roomCode)?.participants.length === 0) {
               activeRooms.delete(roomCode);
               roomStates.delete(roomCode);
-              console.log(`🧹 Cleaned up empty room: ${roomCode}`);
             }
           }, 300000); // 5 minutes delay
         }

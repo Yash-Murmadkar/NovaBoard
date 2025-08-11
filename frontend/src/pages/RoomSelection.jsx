@@ -42,7 +42,11 @@ export default function RoomSelection() {
       const newRoomCode = generateUniqueRoomCode();
       
       // Emit create-room event to backend
-      socket.emit("create-room", { roomCode: newRoomCode, userId: user.id });
+      socket.emit("create-room", { 
+        roomCode: newRoomCode, 
+        userId: user.id, 
+        username: user.name || user.email || 'Anonymous' 
+      });
       
       // Wait for confirmation
       await new Promise((resolve, reject) => {
@@ -91,7 +95,10 @@ export default function RoomSelection() {
     
     try {
       // Emit join-room event to backend
-      socket.emit("join-room", { roomCode: trimmedCode });
+      socket.emit("join-room", { 
+        roomCode: trimmedCode, 
+        username: user.name || user.email || 'Anonymous' 
+      });
       
       // Wait for confirmation
       await new Promise((resolve, reject) => {
