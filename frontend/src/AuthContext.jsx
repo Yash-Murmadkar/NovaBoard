@@ -1,5 +1,7 @@
 import { createContext, useState, useEffect, useCallback } from "react";
 import axios from "axios";
+const backendUrl = import.meta.env.VITE_BACKEND_URL;
+const API_URL = `${backendUrl}/api/auth`;
 
 export const AuthContext = createContext();
 
@@ -7,8 +9,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  const API_URL = "http://localhost:5000/api/auth";
 
   // Memoized loadUser function
   const loadUser = useCallback(async () => {
@@ -71,6 +71,7 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       setError(null);
+      console.log(API_URL)
       const { data } = await axios.post(`${API_URL}/login`, { email, password });
       localStorage.setItem("token", data.token);
       setUser(data.user);

@@ -1,11 +1,11 @@
 // src/socket.js
 import { io } from "socket.io-client";
-
+const backendUrl = import.meta.env.VITE_BACKEND_URL;
 let socket = null;
 
 export function getSocket() {
   if (!socket) {
-    socket = io("http://localhost:5000", {
+    socket = io(backendUrl, {
       transports: ["websocket", "polling"],
       autoConnect: true,
       reconnection: true,

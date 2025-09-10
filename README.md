@@ -1,6 +1,6 @@
 # NovaBoard - Collaborative Whiteboard
 
-NovaBoard is a real-time collaborative whiteboard application that allows users to create and join rooms with unique codes, similar to Among Us game rooms.
+NovaBoard is a real-time collaborative whiteboard application that allows users to create and join rooms with unique codes.
 
 ## Features
 
