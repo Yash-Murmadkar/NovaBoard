@@ -7,6 +7,9 @@ export default function SharedWhiteboard({ roomId, disabled = false, isConnected
   const ctxRef = useRef(null);
   const socketRef = useRef(null);
   const drawCounterRef = useRef(0);
+  // Track remote user drawing state to avoid connecting paths across users
+  const remoteUserStateRef = useRef(new Map()); // userId -> { isDrawing: boolean, lastX: number, lastY: number, mode: string, color: string, size: number }
+  
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [brushColor, setBrushColor] = useState("#000000");
@@ -41,6 +44,8 @@ export default function SharedWhiteboard({ roomId, disabled = false, isConnected
       socket.on("endDraw", handleRemoteEnd);
       socket.on("clear", handleRemoteClear);
 
+      
+
       // Initial sync is handled by the Room component
 
       return () => {
@@ -48,6 +53,7 @@ export default function SharedWhiteboard({ roomId, disabled = false, isConnected
         socket.off("draw", handleRemoteDraw);
         socket.off("endDraw", handleRemoteEnd);
         socket.off("clear", handleRemoteClear);
+        
       };
     };
 
@@ -72,6 +78,8 @@ export default function SharedWhiteboard({ roomId, disabled = false, isConnected
     return () => {
       cleanupSocket?.();
       window.removeEventListener('resize', handleResize);
+      // Clear remote state on unmount
+      remoteUserStateRef.current.clear();
     };
   }, [roomId]);
 
@@ -82,58 +90,90 @@ export default function SharedWhiteboard({ roomId, disabled = false, isConnected
     }
   }, [brushColor, brushSize, mode]);
 
-  // Remote operation handlers - only handle operations from OTHER users
-  const handleRemoteStart = useCallback(({ x, y, color, size, mode: remoteMode, userId }) => {
-    // Skip if this is our own operation
-    if (userId === socketRef.current?.id) {
-      return;
-    }
-    
-    
-    
-    const ctx = ctxRef.current;
+  // Ensure a path exists for a given remote user before drawing
+  const ensureRemotePathStarted = useCallback((userId, xNorm, yNorm, color, size, remoteMode) => {
     const canvas = canvasRef.current;
-    
-    ctx.beginPath();
-    ctx.moveTo(x * canvas.width, y * canvas.height);
-    ctx.strokeStyle = remoteMode === "erase" ? "#ffffff" : color;
-    ctx.lineWidth = size;
-    ctx.globalCompositeOperation = remoteMode === "erase" ? "destination-out" : "source-over";
+    const state = remoteUserStateRef.current.get(userId);
+    if (!state || !state.isDrawing) {
+      // Begin a new path for this user
+      const ctx = ctxRef.current;
+      ctx.beginPath();
+      ctx.moveTo(xNorm * canvas.width, yNorm * canvas.height);
+      ctx.strokeStyle = remoteMode === "erase" ? "#ffffff" : (color || "#000000");
+      ctx.lineWidth = size || 4;
+      ctx.globalCompositeOperation = remoteMode === "erase" ? "destination-out" : "source-over";
+      remoteUserStateRef.current.set(userId, {
+        isDrawing: true,
+        lastX: xNorm,
+        lastY: yNorm,
+        color: color || "#000000",
+        size: size || 4,
+        mode: remoteMode || "draw"
+      });
+    }
   }, []);
 
-  const handleRemoteDraw = useCallback(({ x, y, userId }) => {
-    // Skip if this is our own operation
-    if (userId === socketRef.current?.id) {
-      return;
+  // Remote operation handlers - handle per-user paths safely
+  const handleRemoteStart = useCallback(({ x, y, color, size, mode: remoteMode, userId, clientTs, serverTs }) => {
+    if (userId === socketRef.current?.id) return; // ignore own events
+    ensureRemotePathStarted(userId, x, y, color, size, remoteMode);
+    if (typeof serverTs === "number") {
+      const downstream = Date.now() - serverTs;
+      console.log(`Downstream latency (startDraw from ${userId.slice(0,8)}): ${downstream}ms`);
+    } else if (typeof clientTs === "number") {
+      const approx = performance.now() - clientTs;
+      console.log(`Approx E2E (unsynced clocks) startDraw: ${Math.round(approx)}ms`);
     }
-    
-    const ctx = ctxRef.current;
+  }, [ensureRemotePathStarted]);
+
+  const handleRemoteDraw = useCallback(({ x, y, userId, clientTs, serverTs }) => {
+    if (userId === socketRef.current?.id) return; // ignore own events
     const canvas = canvasRef.current;
-    
+    const state = remoteUserStateRef.current.get(userId);
+    // If we missed startDraw due to network/throttle, ensure path is started
+    if (!state) {
+      ensureRemotePathStarted(userId, x, y, undefined, undefined, "draw");
+      // continue with draw so first segment renders
+    }
+    const ctx = ctxRef.current;
     ctx.lineTo(x * canvas.width, y * canvas.height);
     ctx.stroke();
-  }, []);
-
-  const handleRemoteEnd = useCallback(({ userId }) => {
-    // Skip if this is our own operation
-    if (userId === socketRef.current?.id) {
-      return;
+    state.lastX = x;
+    state.lastY = y;
+    if (typeof serverTs === "number") {
+      const downstream = Date.now() - serverTs;
+      console.log(`Downstream latency (draw from ${userId.slice(0,8)}): ${downstream}ms`);
+    } else if (typeof clientTs === "number") {
+      const approx = performance.now() - clientTs;
+      console.log(`Approx E2E (unsynced clocks) draw: ${Math.round(approx)}ms`);
     }
-    
+  }, [ensureRemotePathStarted]);
+
+  const handleRemoteEnd = useCallback(({ userId, serverTs, clientTs }) => {
+    if (userId === socketRef.current?.id) return; // ignore own events
     const ctx = ctxRef.current;
-    ctx.closePath();
-    ctx.globalCompositeOperation = "source-over";
+    const state = remoteUserStateRef.current.get(userId);
+    if (state && state.isDrawing) {
+      ctx.closePath();
+      ctx.globalCompositeOperation = "source-over";
+      remoteUserStateRef.current.delete(userId);
+    }
+    if (typeof serverTs === "number") {
+      const downstream = Date.now() - serverTs;
+      console.log(`Downstream latency (endDraw from ${userId.slice(0,8)}): ${downstream}ms`);
+    } else if (typeof clientTs === "number") {
+      const approx = performance.now() - clientTs;
+      console.log(`Approx E2E (unsynced clocks) endDraw: ${Math.round(approx)}ms`);
+    }
   }, []);
 
   const handleRemoteClear = useCallback(({ userId }) => {
-    // Skip if this is our own operation
-    if (userId === socketRef.current?.id) {
-      return;
-    }
-    
+    if (userId === socketRef.current?.id) return; // ignore own events
     const canvas = canvasRef.current;
     const ctx = ctxRef.current;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Reset all remote states as canvas is cleared
+    remoteUserStateRef.current.clear();
   }, []);
 
   // Local drawing functions - these work independently and emit to others
@@ -146,28 +186,28 @@ export default function SharedWhiteboard({ roomId, disabled = false, isConnected
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-
-
     // Reset draw counter for new drawing session
     drawCounterRef.current = 0;
 
     // Start drawing locally first
     ctx.beginPath();
     ctx.moveTo(x, y);
+    ctx.strokeStyle = mode === "erase" ? "#ffffff" : brushColor;
+    ctx.lineWidth = brushSize;
+    ctx.globalCompositeOperation = mode === "erase" ? "destination-out" : "source-over";
     setIsDrawing(true);
 
-    // Emit to other users after a short delay to ensure local drawing is complete
-    setTimeout(() => {
-      socketRef.current.emit("startDraw", {
-        roomId,
-        x: x / canvas.width,
-        y: y / canvas.height,
-        color: brushColor,
-        size: brushSize,
-        mode: mode,
-        userId: socketRef.current.id
-      });
-    }, 10);
+    // Emit start immediately to reduce race with remote 'draw'
+    socketRef.current.emit("startDraw", {
+      roomId,
+      x: x / canvas.width,
+      y: y / canvas.height,
+      color: brushColor,
+      size: brushSize,
+      mode: mode,
+      userId: socketRef.current.id,
+      clientTs: performance.now()
+    });
   }, [disabled, brushColor, brushSize, mode, roomId]);
 
   const draw = useCallback((e) => {
@@ -184,7 +224,6 @@ export default function SharedWhiteboard({ roomId, disabled = false, isConnected
     ctx.stroke();
 
     // Emit to other users less frequently to avoid overwhelming the network
-    // Use a counter to emit every 3rd draw event for smooth performance
     drawCounterRef.current++;
     
     if (drawCounterRef.current % 3 === 0) {
@@ -192,7 +231,8 @@ export default function SharedWhiteboard({ roomId, disabled = false, isConnected
         roomId,
         x: x / canvas.width,
         y: y / canvas.height,
-        userId: socketRef.current.id
+        userId: socketRef.current.id,
+        clientTs: performance.now()
       });
     }
   }, [isDrawing, disabled, roomId]);
@@ -202,12 +242,14 @@ export default function SharedWhiteboard({ roomId, disabled = false, isConnected
     
     const ctx = ctxRef.current;
     ctx.closePath();
+    ctx.globalCompositeOperation = "source-over";
     setIsDrawing(false);
 
     // Emit to other users
     socketRef.current.emit("endDraw", { 
       roomId, 
-      userId: socketRef.current.id 
+      userId: socketRef.current.id,
+      clientTs: performance.now() 
     });
   }, [disabled, roomId]);
 
@@ -223,6 +265,8 @@ export default function SharedWhiteboard({ roomId, disabled = false, isConnected
       roomId, 
       userId: socketRef.current.id 
     });
+    // Reset remote states
+    remoteUserStateRef.current.clear();
   }, [roomId]);
 
   const downloadImage = useCallback(() => {
@@ -235,10 +279,8 @@ export default function SharedWhiteboard({ roomId, disabled = false, isConnected
 
   return (
     <div className="flex flex-col items-center p-4">
-             
-
-       
-
+      
+      
       {/* Toolbar */}
       <div className="mb-4 flex flex-wrap gap-3 justify-center">
         <button 

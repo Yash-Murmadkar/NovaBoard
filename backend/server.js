@@ -159,18 +159,21 @@ io.on("connection", (socket) => {
   socket.on("startDraw", (data) => {
     // Add socket ID to data for identification
     data.userId = socket.id;
+    data.serverTs = Date.now();
     socket.to(data.roomId).emit("startDraw", data);
   });
 
   socket.on("draw", (data) => {
     // Add socket ID to data for identification
     data.userId = socket.id;
+    data.serverTs = Date.now();
     socket.to(data.roomId).emit("draw", data);
   });
 
   socket.on("endDraw", (data) => {
     // Add socket ID to data for identification
     data.userId = socket.id;
+    data.serverTs = Date.now();
     socket.to(data.roomId).emit("endDraw", data);
   });
 
@@ -187,6 +190,8 @@ io.on("connection", (socket) => {
     
     socket.to(data.roomId).emit("clear", data);
   });
+
+  
 
   // Handle manual room leaving
   socket.on("leave-room", ({ roomCode }) => {
